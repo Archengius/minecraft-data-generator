@@ -115,18 +115,24 @@ public class BlocksDataGenerator implements IDataGenerator {
     }
 
     private static String findMatchingBlockMaterial(BlockState blockState, List<MaterialsDataGenerator.MaterialInfo> materials) {
-        List<String> matchingMaterials = materials.stream()
-                .filter(material -> material.predicate().test(blockState))
-                .map(MaterialsDataGenerator.MaterialInfo::materialName)
+        List<MaterialsDataGenerator.MaterialInfo> matchingMaterials = materials.stream()
+                .filter(material -> material.getPredicate().test(blockState))
                 .collect(Collectors.toList());
 
         if (matchingMaterials.size() > 1) {
-            logger.error("Block {} matched multiple materials: {}", blockState.getBlock(), matchingMaterials);
+            var firstMaterial = matchingMaterials.get(0);
+            var otherMaterials = matchingMaterials.subList(1, matchingMaterials.size());
+            var canOverrideAll = otherMaterials.stream()
+                    .allMatch(other -> firstMaterial.canOverrideMaterial(other.getMaterialName()));
+
+            if (!canOverrideAll) {
+                logger.error("Block {} matches multiple materials: {}", blockState.getBlock(), matchingMaterials);
+            }
         }
         if (matchingMaterials.isEmpty()) {
             return "default";
         }
-        return matchingMaterials.get(0);
+        return matchingMaterials.get(0).getMaterialName();
     }
 
     public static JsonObject generateBlock(Registry<Block> blockRegistry, List<MaterialsDataGenerator.MaterialInfo> materials, Block block) {

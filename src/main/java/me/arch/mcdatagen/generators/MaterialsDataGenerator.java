@@ -34,7 +34,37 @@ public class MaterialsDataGenerator implements IDataGenerator {
         return identifiedTag.getId().getPath();
     }
 
-    public record MaterialInfo(String materialName, Predicate<BlockState> predicate) {
+    public static class MaterialInfo {
+        private final String materialName;
+        private final Predicate<BlockState> predicate;
+        private List<String> allowTogetherWith = new ArrayList<>();
+
+        public MaterialInfo(String materialName, Predicate<BlockState> predicate) {
+            this.materialName = materialName;
+            this.predicate = predicate;
+        }
+
+        public boolean canOverrideMaterial(String materialName) {
+            return allowTogetherWith.contains(materialName);
+        }
+
+        public MaterialInfo allowOverridingMaterial(String materialName) {
+            this.allowTogetherWith.add(materialName);
+            return this;
+        }
+
+        public String getMaterialName() {
+            return materialName;
+        }
+
+        public Predicate<BlockState> getPredicate() {
+            return predicate;
+        }
+
+        @Override
+        public String toString() {
+            return materialName;
+        }
     }
 
     public static List<MaterialInfo> getGlobalMaterialInfo() {
@@ -46,10 +76,15 @@ public class MaterialsDataGenerator implements IDataGenerator {
 
         resultList.add(new MaterialInfo("leaves", blockState -> blockState.isIn(BlockTags.LEAVES)));
         resultList.add(new MaterialInfo("wool", blockState -> blockState.isIn(BlockTags.WOOL)));
-        resultList.add(new MaterialInfo("ground", blockState -> blockState.getMaterial() == Material.GOURD));
+
+        //We allow combining two next materials with AXE_MINEABLE since they also include axes as efficient tools explicitly
+        resultList.add(new MaterialInfo("ground", blockState ->
+                blockState.getMaterial() == Material.GOURD)
+            .allowOverridingMaterial(makeMaterialNameForTag(BlockTags.AXE_MINEABLE)));
 
         resultList.add(new MaterialInfo("plant", blockState ->
-                blockState.getMaterial() == Material.PLANT || blockState.getMaterial() == Material.REPLACEABLE_PLANT));
+                blockState.getMaterial() == Material.PLANT || blockState.getMaterial() == Material.REPLACEABLE_PLANT)
+            .allowOverridingMaterial(makeMaterialNameForTag(BlockTags.AXE_MINEABLE)));
 
         HashSet<String> uniqueMaterialNames = new HashSet<>();
 
@@ -103,6 +138,12 @@ public class MaterialsDataGenerator implements IDataGenerator {
                 Map<Item, Float> materialSpeeds = materialMiningSpeeds.computeIfAbsent(materialName, k -> new HashMap<>());
                 float miningSpeed = ((MiningToolItemAccessor) toolItem).getMiningSpeed();
                 materialSpeeds.put(item, miningSpeed);
+
+                //Axes are also efficient on gourd and plants, and need to be added explicitly since we have swords here too
+                if (effectiveBlocks == BlockTags.AXE_MINEABLE) {
+                    plantMaterialSpeeds.put(item, miningSpeed);
+                    gourdMaterialSpeeds.put(item, miningSpeed);
+                }
             }
 
             //Swords require special treatment
