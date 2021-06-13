@@ -121,11 +121,7 @@ public class BlocksDataGenerator implements IDataGenerator {
 
         if (matchingMaterials.size() > 1) {
             var firstMaterial = matchingMaterials.get(0);
-            var otherMaterials = matchingMaterials.subList(1, matchingMaterials.size());
-            var canOverrideAll = otherMaterials.stream()
-                    .allMatch(other -> firstMaterial.canOverrideMaterial(other.getMaterialName()));
-
-            if (!canOverrideAll) {
+            if (!firstMaterial.trumpsAllOtherMaterials()) {
                 logger.error("Block {} matches multiple materials: {}", blockState.getBlock(), matchingMaterials);
             }
         }

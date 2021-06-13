@@ -1,5 +1,6 @@
 package me.arch.mcdatagen.generators;
 
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
@@ -18,11 +19,36 @@ import net.minecraft.util.registry.Registry;
 
 import java.util.*;
 import java.util.function.Predicate;
+import java.util.stream.Collectors;
 
 //TODO entire idea of linking materials to tool speeds is obsolete and just wrong now,
 //TODO but we kinda have to support it to let old code work for computing digging times,
 //TODO so for now we will handle materials as "virtual" ones based on which tools can break blocks
 public class MaterialsDataGenerator implements IDataGenerator {
+
+    private static ImmutableMap<String, ImmutableList<String>> COMPOSITE_MATERIALS = ImmutableMap.<String, ImmutableList<String>>builder()
+            .put("plant_mineable_by_axe", ImmutableList.of(
+                    "plant",
+                    makeMaterialNameForTag(BlockTags.AXE_MINEABLE)))
+
+            .put("gourd_mineable_by_axe", ImmutableList.of(
+                    "gourd",
+                    makeMaterialNameForTag(BlockTags.AXE_MINEABLE)))
+
+            .put("leaves_mineable_by_hoe", ImmutableList.of(
+                    makeMaterialNameForTag(BlockTags.LEAVES),
+                    makeMaterialNameForTag(BlockTags.HOE_MINEABLE)))
+
+            .put("leaves_mineable_by_axe_and_hoe", ImmutableList.of(
+                    makeMaterialNameForTag(BlockTags.LEAVES),
+                    makeMaterialNameForTag(BlockTags.AXE_MINEABLE),
+                    makeMaterialNameForTag(BlockTags.HOE_MINEABLE)))
+
+            .put("vine_plant_mineable_by_axe", ImmutableList.of(
+                    "vine_or_glow_lichen",
+                    "plant",
+                    makeMaterialNameForTag(BlockTags.AXE_MINEABLE)
+            )).build();
 
     @Override
     public String getDataName() {
@@ -37,19 +63,15 @@ public class MaterialsDataGenerator implements IDataGenerator {
     public static class MaterialInfo {
         private final String materialName;
         private final Predicate<BlockState> predicate;
-        private List<String> allowTogetherWith = new ArrayList<>();
+        private boolean trumpsAllOtherMaterials;
 
         public MaterialInfo(String materialName, Predicate<BlockState> predicate) {
             this.materialName = materialName;
             this.predicate = predicate;
         }
 
-        public boolean canOverrideMaterial(String materialName) {
-            return allowTogetherWith.contains(materialName);
-        }
-
-        public MaterialInfo allowOverridingMaterial(String materialName) {
-            this.allowTogetherWith.add(materialName);
+        protected MaterialInfo setTrumpsAllOtherMaterials() {
+            this.trumpsAllOtherMaterials = true;
             return this;
         }
 
@@ -61,30 +83,50 @@ public class MaterialsDataGenerator implements IDataGenerator {
             return predicate;
         }
 
+        public boolean trumpsAllOtherMaterials() {
+            return trumpsAllOtherMaterials;
+        }
+
         @Override
         public String toString() {
             return materialName;
         }
     }
 
+    private static void createCompositeMaterialInfo(List<MaterialInfo> allMaterials, String compositeMaterialName, List<String> combinedMaterials) {
+        List<MaterialInfo> mappedMaterials = combinedMaterials.stream()
+                .map(otherName -> allMaterials.stream()
+                        .filter(other -> other.getMaterialName().equals(otherName))
+                        .findFirst().orElseThrow(() -> new RuntimeException("Material not found with name " + otherName)))
+                .collect(Collectors.toList());
+
+        Predicate<BlockState> compositePredicate = blockState ->
+                mappedMaterials.stream().allMatch(it -> it.getPredicate().test(blockState));
+
+        MaterialInfo materialInfo = new MaterialInfo(compositeMaterialName, compositePredicate)
+                .setTrumpsAllOtherMaterials();
+        allMaterials.add(0, materialInfo);
+    }
+
+    private static void createCompositeMaterial(Map<String, Map<Item, Float>> allMaterials, String compositeMaterialName, List<String> combinedMaterials) {
+        Map<Item, Float> resultingToolSpeeds = new HashMap<>();
+        combinedMaterials.stream()
+                .map(allMaterials::get)
+                .forEach(resultingToolSpeeds::putAll);
+        allMaterials.put(compositeMaterialName, resultingToolSpeeds);
+    }
+
     public static List<MaterialInfo> getGlobalMaterialInfo() {
         ArrayList<MaterialInfo> resultList = new ArrayList<>();
 
-        resultList.add(new MaterialInfo("vine", blockState -> blockState.isOf(Blocks.VINE)));
-        resultList.add(new MaterialInfo("glow_lichen", blockState -> blockState.isOf(Blocks.GLOW_LICHEN)));
+        resultList.add(new MaterialInfo("vine_or_glow_lichen", blockState -> blockState.isOf(Blocks.VINE) || blockState.isOf(Blocks.GLOW_LICHEN)));
         resultList.add(new MaterialInfo("coweb", blockState -> blockState.isOf(Blocks.COBWEB)));
 
         resultList.add(new MaterialInfo("leaves", blockState -> blockState.isIn(BlockTags.LEAVES)));
         resultList.add(new MaterialInfo("wool", blockState -> blockState.isIn(BlockTags.WOOL)));
 
-        //We allow combining two next materials with AXE_MINEABLE since they also include axes as efficient tools explicitly
-        resultList.add(new MaterialInfo("ground", blockState ->
-                blockState.getMaterial() == Material.GOURD)
-            .allowOverridingMaterial(makeMaterialNameForTag(BlockTags.AXE_MINEABLE)));
-
-        resultList.add(new MaterialInfo("plant", blockState ->
-                blockState.getMaterial() == Material.PLANT || blockState.getMaterial() == Material.REPLACEABLE_PLANT)
-            .allowOverridingMaterial(makeMaterialNameForTag(BlockTags.AXE_MINEABLE)));
+        resultList.add(new MaterialInfo("gourd", blockState -> blockState.getMaterial() == Material.GOURD));
+        resultList.add(new MaterialInfo("plant", blockState -> blockState.getMaterial() == Material.PLANT || blockState.getMaterial() == Material.REPLACEABLE_PLANT));
 
         HashSet<String> uniqueMaterialNames = new HashSet<>();
 
@@ -101,6 +143,7 @@ public class MaterialsDataGenerator implements IDataGenerator {
             }
         });
 
+        COMPOSITE_MATERIALS.forEach((name, values) -> createCompositeMaterialInfo(resultList, name, values));
         return resultList;
     }
 
@@ -125,8 +168,7 @@ public class MaterialsDataGenerator implements IDataGenerator {
         //Shears need special handling because they do not follow normal rules like tools
         leavesMaterialSpeeds.put(Items.SHEARS, 15.0f);
         cowebMaterialSpeeds.put(Items.SHEARS, 15.0f);
-        materialMiningSpeeds.put("vine", ImmutableMap.of(Items.SHEARS, 2.0f));
-        materialMiningSpeeds.put("glow_lichen", ImmutableMap.of(Items.SHEARS, 2.0f));
+        materialMiningSpeeds.put("vine_or_glow_lichen", ImmutableMap.of(Items.SHEARS, 2.0f));
         materialMiningSpeeds.put("wool", ImmutableMap.of(Items.SHEARS, 5.0f));
 
         itemRegistry.forEach(item -> {
@@ -138,22 +180,18 @@ public class MaterialsDataGenerator implements IDataGenerator {
                 Map<Item, Float> materialSpeeds = materialMiningSpeeds.computeIfAbsent(materialName, k -> new HashMap<>());
                 float miningSpeed = ((MiningToolItemAccessor) toolItem).getMiningSpeed();
                 materialSpeeds.put(item, miningSpeed);
-
-                //Axes are also efficient on gourd and plants, and need to be added explicitly since we have swords here too
-                if (effectiveBlocks == BlockTags.AXE_MINEABLE) {
-                    plantMaterialSpeeds.put(item, miningSpeed);
-                    gourdMaterialSpeeds.put(item, miningSpeed);
-                }
             }
 
             //Swords require special treatment
             if (item instanceof SwordItem) {
                 cowebMaterialSpeeds.put(item, 15.0f);
-                leavesMaterialSpeeds.put(item, 1.5f);
                 plantMaterialSpeeds.put(item, 1.5f);
+                leavesMaterialSpeeds.put(item, 1.5f);
                 gourdMaterialSpeeds.put(item, 1.5f);
             }
         });
+
+        COMPOSITE_MATERIALS.forEach((name, values) -> createCompositeMaterial(materialMiningSpeeds, name, values));
 
         JsonObject resultObject = new JsonObject();
 
