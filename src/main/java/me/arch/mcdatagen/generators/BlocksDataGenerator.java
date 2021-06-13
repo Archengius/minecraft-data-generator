@@ -24,6 +24,8 @@ import net.minecraft.util.math.Vec3d;
 import net.minecraft.util.registry.Registry;
 import net.minecraft.util.shape.VoxelShape;
 import net.minecraft.world.EmptyBlockView;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -32,10 +34,7 @@ import java.util.stream.Collectors;
 
 public class BlocksDataGenerator implements IDataGenerator {
 
-    //TODO really need to do ImmutableMap<Material, String> since materials have no actual identifiers or registries
-    private static String guessMaterialName(Material material) {
-        return "UNKNOWN";
-    }
+    private static Logger logger = LoggerFactory.getLogger(BlocksDataGenerator.class);
 
     private static List<Item> getItemsEffectiveForBlock(BlockState blockState) {
         return Registry.ITEM.stream()
@@ -109,11 +108,28 @@ public class BlocksDataGenerator implements IDataGenerator {
     public JsonArray generateDataJson() {
         JsonArray resultBlocksArray = new JsonArray();
         Registry<Block> blockRegistry = Registry.BLOCK;
-        blockRegistry.forEach(block -> resultBlocksArray.add(generateBlock(blockRegistry, block)));
+        List<MaterialsDataGenerator.MaterialInfo> availableMaterials = MaterialsDataGenerator.getGlobalMaterialInfo();
+
+        blockRegistry.forEach(block -> resultBlocksArray.add(generateBlock(blockRegistry, availableMaterials, block)));
         return resultBlocksArray;
     }
 
-    public static JsonObject generateBlock(Registry<Block> blockRegistry, Block block) {
+    private static String findMatchingBlockMaterial(BlockState blockState, List<MaterialsDataGenerator.MaterialInfo> materials) {
+        List<String> matchingMaterials = materials.stream()
+                .filter(material -> material.predicate().test(blockState))
+                .map(MaterialsDataGenerator.MaterialInfo::materialName)
+                .collect(Collectors.toList());
+
+        if (matchingMaterials.size() > 1) {
+            logger.error("Block {} matched multiple materials: {}", blockState.getBlock(), matchingMaterials);
+        }
+        if (matchingMaterials.isEmpty()) {
+            return "default";
+        }
+        return matchingMaterials.get(0);
+    }
+
+    public static JsonObject generateBlock(Registry<Block> blockRegistry, List<MaterialsDataGenerator.MaterialInfo> materials, Block block) {
         JsonObject blockDesc = new JsonObject();
 
         List<BlockState> blockStates = block.getStateManager().getStates();
@@ -129,8 +145,8 @@ public class BlocksDataGenerator implements IDataGenerator {
         blockDesc.addProperty("hardness", block.getHardness());
         blockDesc.addProperty("resistance", block.getBlastResistance());
         blockDesc.addProperty("stackSize", blockItem.getMaxCount());
-        blockDesc.addProperty("diggable", block.getHardness() >= 0.0f);
-        blockDesc.addProperty("material", guessMaterialName(defaultState.getMaterial()));
+        blockDesc.addProperty("diggable", block.getHardness() != -1.0f);
+        blockDesc.addProperty("material", findMatchingBlockMaterial(defaultState, materials));
 
         blockDesc.addProperty("transparent", !defaultState.isOpaque());
         blockDesc.addProperty("emitLight", defaultState.getLuminance());

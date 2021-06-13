@@ -1,0 +1,12 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "me.arch.mcdatagen.mixin",
+  "compatibilityLevel": "JAVA_16",
+  "mixins": [
+    "MiningToolItemAccessor"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

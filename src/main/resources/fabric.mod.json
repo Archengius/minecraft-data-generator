@@ -17,6 +17,9 @@
   "icon": "assets/mcdatagen/icon.png",
 
   "environment": "*",
+  "mixins": [
+    "mcdatagen.mixins.json"
+  ],
   "entrypoints": {
     "main": [
       "me.arch.mcdatagen.MCDataGenerator"
