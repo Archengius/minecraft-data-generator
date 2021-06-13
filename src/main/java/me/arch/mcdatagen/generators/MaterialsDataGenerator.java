@@ -1,5 +1,6 @@
 package me.arch.mcdatagen.generators;
 
+import com.google.common.base.Joiner;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.gson.JsonElement;
@@ -26,28 +27,12 @@ import java.util.stream.Collectors;
 //TODO so for now we will handle materials as "virtual" ones based on which tools can break blocks
 public class MaterialsDataGenerator implements IDataGenerator {
 
-    private static ImmutableMap<String, ImmutableList<String>> COMPOSITE_MATERIALS = ImmutableMap.<String, ImmutableList<String>>builder()
-            .put("plant_mineable_by_axe", ImmutableList.of(
-                    "plant",
-                    makeMaterialNameForTag(BlockTags.AXE_MINEABLE)))
-
-            .put("gourd_mineable_by_axe", ImmutableList.of(
-                    "gourd",
-                    makeMaterialNameForTag(BlockTags.AXE_MINEABLE)))
-
-            .put("leaves_mineable_by_hoe", ImmutableList.of(
-                    makeMaterialNameForTag(BlockTags.LEAVES),
-                    makeMaterialNameForTag(BlockTags.HOE_MINEABLE)))
-
-            .put("leaves_mineable_by_axe_and_hoe", ImmutableList.of(
-                    makeMaterialNameForTag(BlockTags.LEAVES),
-                    makeMaterialNameForTag(BlockTags.AXE_MINEABLE),
-                    makeMaterialNameForTag(BlockTags.HOE_MINEABLE)))
-
-            .put("vine_plant_mineable_by_axe", ImmutableList.of(
-                    "vine_or_glow_lichen",
-                    "plant",
-                    makeMaterialNameForTag(BlockTags.AXE_MINEABLE)
+    private static final List<ImmutableList<String>> COMPOSITE_MATERIALS = ImmutableList.<ImmutableList<String>>builder()
+            .add(ImmutableList.of("plant", makeMaterialNameForTag(BlockTags.AXE_MINEABLE)))
+            .add(ImmutableList.of("gourd", makeMaterialNameForTag(BlockTags.AXE_MINEABLE)))
+            .add(ImmutableList.of(makeMaterialNameForTag(BlockTags.LEAVES), makeMaterialNameForTag(BlockTags.HOE_MINEABLE)))
+            .add(ImmutableList.of(makeMaterialNameForTag(BlockTags.LEAVES), makeMaterialNameForTag(BlockTags.AXE_MINEABLE), makeMaterialNameForTag(BlockTags.HOE_MINEABLE)))
+            .add(ImmutableList.of("vine_or_glow_lichen", "plant", makeMaterialNameForTag(BlockTags.AXE_MINEABLE)
             )).build();
 
     @Override
@@ -63,15 +48,15 @@ public class MaterialsDataGenerator implements IDataGenerator {
     public static class MaterialInfo {
         private final String materialName;
         private final Predicate<BlockState> predicate;
-        private boolean trumpsAllOtherMaterials;
+        private final List<MaterialInfo> includedMaterials = new ArrayList<>();
 
         public MaterialInfo(String materialName, Predicate<BlockState> predicate) {
             this.materialName = materialName;
             this.predicate = predicate;
         }
 
-        protected MaterialInfo setTrumpsAllOtherMaterials() {
-            this.trumpsAllOtherMaterials = true;
+        protected MaterialInfo includes(List<MaterialInfo> otherMaterials) {
+            this.includedMaterials.addAll(otherMaterials);
             return this;
         }
 
@@ -83,8 +68,8 @@ public class MaterialsDataGenerator implements IDataGenerator {
             return predicate;
         }
 
-        public boolean trumpsAllOtherMaterials() {
-            return trumpsAllOtherMaterials;
+        public boolean includesMaterial(MaterialInfo materialInfo) {
+            return includedMaterials.contains(materialInfo);
         }
 
         @Override
@@ -93,7 +78,9 @@ public class MaterialsDataGenerator implements IDataGenerator {
         }
     }
 
-    private static void createCompositeMaterialInfo(List<MaterialInfo> allMaterials, String compositeMaterialName, List<String> combinedMaterials) {
+    private static void createCompositeMaterialInfo(List<MaterialInfo> allMaterials, List<String> combinedMaterials) {
+        String compositeMaterialName = Joiner.on(';').join(combinedMaterials);
+
         List<MaterialInfo> mappedMaterials = combinedMaterials.stream()
                 .map(otherName -> allMaterials.stream()
                         .filter(other -> other.getMaterialName().equals(otherName))
@@ -103,12 +90,13 @@ public class MaterialsDataGenerator implements IDataGenerator {
         Predicate<BlockState> compositePredicate = blockState ->
                 mappedMaterials.stream().allMatch(it -> it.getPredicate().test(blockState));
 
-        MaterialInfo materialInfo = new MaterialInfo(compositeMaterialName, compositePredicate)
-                .setTrumpsAllOtherMaterials();
+        MaterialInfo materialInfo = new MaterialInfo(compositeMaterialName, compositePredicate).includes(mappedMaterials);
         allMaterials.add(0, materialInfo);
     }
 
-    private static void createCompositeMaterial(Map<String, Map<Item, Float>> allMaterials, String compositeMaterialName, List<String> combinedMaterials) {
+    private static void createCompositeMaterial(Map<String, Map<Item, Float>> allMaterials, List<String> combinedMaterials) {
+        String compositeMaterialName = Joiner.on(';').join(combinedMaterials);
+
         Map<Item, Float> resultingToolSpeeds = new HashMap<>();
         combinedMaterials.stream()
                 .map(allMaterials::get)
@@ -143,7 +131,7 @@ public class MaterialsDataGenerator implements IDataGenerator {
             }
         });
 
-        COMPOSITE_MATERIALS.forEach((name, values) -> createCompositeMaterialInfo(resultList, name, values));
+        COMPOSITE_MATERIALS.forEach(values -> createCompositeMaterialInfo(resultList, values));
         return resultList;
     }
 
@@ -191,7 +179,7 @@ public class MaterialsDataGenerator implements IDataGenerator {
             }
         });
 
-        COMPOSITE_MATERIALS.forEach((name, values) -> createCompositeMaterial(materialMiningSpeeds, name, values));
+        COMPOSITE_MATERIALS.forEach(values -> createCompositeMaterial(materialMiningSpeeds, values));
 
         JsonObject resultObject = new JsonObject();
 

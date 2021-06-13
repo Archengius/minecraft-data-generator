@@ -72,5 +72,6 @@ public class DataGenerators {
         register(new ItemsDataGenerator());
         register(new ParticlesDataGenerator());
         register(new TintsDataGenerator());
+        register(new MaterialsDataGenerator());
     }
 }
