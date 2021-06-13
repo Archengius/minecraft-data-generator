@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "id": "mcdatagen",
+  "version": "${version}",
+
+  "name": "Minecraft Data Generator",
+  "description": "Retrieve data from the game in https://github.com/PrismarineJS/minecraft-data format",
+  "authors": [
+    "Archengius"
+  ],
+  "contact": {
+    "homepage": "https://github.com/Archengius/minecraft-data-generator",
+    "sources": "https://github.com/Archengius/minecraft-data-generator"
+  },
+
+  "license": "CC0-1.0",
+  "icon": "assets/mcdatagen/icon.png",
+
+  "environment": "*",
+  "entrypoints": {
+    "main": [
+      "me.arch.mcdatagen.MCDataGenerator"
+    ]
+  },
+  "depends": {
+    "fabricloader": ">=0.11.3",
+    "fabric": "*",
+    "minecraft": "1.17.x",
+    "java": ">=16"
+  }
+}
