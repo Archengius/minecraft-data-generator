@@ -147,11 +147,15 @@ public class BlocksDataGenerator implements IDataGenerator {
         blockDesc.add("states", stateProperties);
 
         List<Item> effectiveTools = getItemsEffectiveForBlock(defaultState);
-        JsonObject effectiveToolsObject = new JsonObject();
-        for (Item effectiveItem : effectiveTools) {
-            effectiveToolsObject.addProperty(Integer.toString(Item.getRawId(effectiveItem)), true);
+
+        //Only add harvest tools if tool is required for harvesting this block
+        if (defaultState.isToolRequired()) {
+            JsonObject effectiveToolsObject = new JsonObject();
+            for (Item effectiveItem : effectiveTools) {
+                effectiveToolsObject.addProperty(Integer.toString(Item.getRawId(effectiveItem)), true);
+            }
+            blockDesc.add("harvestTools", effectiveToolsObject);
         }
-        blockDesc.add("harvestTools", effectiveToolsObject);
 
         List<ItemStack> actualBlockDrops = new ArrayList<>();
         populateDropsIfPossible(defaultState, effectiveTools.isEmpty() ? Items.AIR : effectiveTools.get(0), actualBlockDrops);
