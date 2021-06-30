@@ -6,6 +6,9 @@
   "mixins": [
     "MiningToolItemAccessor"
   ],
+  "client": [
+    "ClientPlayerInteractionManagerMixin"
+  ],
   "injectors": {
     "defaultRequire": 1
   }
