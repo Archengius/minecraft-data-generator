@@ -14,7 +14,7 @@ public class GenerateDataCommand {
 
     private static int executeCommand(CommandContext<ServerCommandSource> context) {
         String versionName = MinecraftVersion.GAME_VERSION.getName();
-        Path serverRootDirectory = context.getSource().getMinecraftServer().getRunDirectory().toPath().toAbsolutePath();
+        Path serverRootDirectory = context.getSource().getServer().getRunDirectory().toPath().toAbsolutePath();
         Path dataDumpDirectory = serverRootDirectory.resolve("minecraft-data").resolve(versionName);
 
         if (DataGenerators.runDataGenerators(dataDumpDirectory)) {
